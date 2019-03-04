@@ -3,18 +3,65 @@
 
 \section{Ziele}
 
+- Warum Raft? Einfacher zu implementieren als Paxos, Zab schon in Open-Source implementiert (Zookeeper), Vorteil von Zab nicht so relevant, entspricht nicht dem Nutzungsprofil, 
+- sowohl standalone als auch als library
+- leichtgewichtig, performant, ausbaumöglichkeiten -> keine großen Frameworks/Libraries benutzen
+- Warum Java? Soll für DXRAM verwendet werden (als Library) und DXRAM in Java; Typsicherheit vorteilhaft, da Einigungsalgorithmus nicht trivial; sehr verbreitet, mit guten Tools/Libraries
+- Gradle
+- möglichst einfache Nutzung und Bootstrapping
+- Konzept: Server verbinden sich im Cluster, Client bietet API für Nutzer, API: Speicherung von Key-Value-Daten (Write/Read/Delete), verteilte atomic integers (mit atomic incrment, decrement)
+
 \section{Server}
 
-\subsection{Threads}
+\subsection{Messaging}
+
+- Raft nutzt Messaging Ansatz, erlaubt unzuverlässiges Netzwerk/verlorene Nachrichten -> UDP für Kommunikation zwischen Server und Server/Clients
+- modular aufbauen mit Interfaces, um später bessere Implementierung zu nutzen (evtl. TCP...)
+- Ein Thread pro Socket -> übernimmt Annahme von Messages, Deserialisierung und Bearbeitung
+- extra Socket/Thread für Client-Anfragen
+
 
 \subsection{Bootstrapping}
 
+- Jeder Server muss alle anderen Server kennen
+- Zunächst: statische Konfiguration in Konfigurationsdatei
+- Besser: dynamische Konfiguration, Server finden sich gegenseitig über Broadcast, ein Bootstrap-Server beginnt Aufbau eines Clusters, andere Server treten per Broadcast bei, bekommen Konfiguration und Log des Systems über normalen Änderungsmechanismus
+
 \subsection{Persistenz}
+
+- Log schnell sehr groß im Speicher (viele Objekte), belastet schnell den Garbage Collector, wodurch Timeouts nicht mehr richtig funktionieren (große Pausen > 500ms)
+- Log muss persistiert werden, da nicht unendlich viel Arbeitsspeicher vorhanden
+- Muss theoretisch beliebig weit durchsucht werden können (durch Follower, die zu weit hinterher hinken)
+- Muss außerdem teilweise gelöscht werden können -> Normales Append-Log nicht geeignet
+- Einträge beliebig groß -> Länge muss mitgespeichert werden, kann nicht direkt zugreifen
+- Durchsuchen dauert ohne extra Datenstruktur sehr lange
+- Eine Möglichkeit: Extra Datei mit Einträgen Index->Adresse im Log; Nachteil: beim Appenden zwei Diskzugriffe, sehr langsam
+- Bessere Möglichkeit: Baumstruktur des Dateisystems nutzen, um schneller lesen zu können; Log in mehrere Dateien mit maximaler Anzahl an Einträgen/Größe teilen; Dateien nach erstem enthaltenem Index benennen; Beim Lesen: Log-Directory lesen, Datei, in welchem der Eintrag ist, kann anhand des Dateinamens bestimmt werden. Dann Datei einlesen; (BufferedReader/BufferedWriter nutzen) -> Schreiben ein Diskzugriff, Lesen einer um Datei zu bestimmmen und Datei einlesen beschränkt, da Größe beschränkt
+- Cache
+
+- Persistenz von anderen Daten(current term, ...) noch nicht implementiert; Restart also noch nicht möglich
+
+\subsection{Änderungen des Clusters}
+
+- nicht ganz trivial, da Teilnehmer Teil der entscheidenden Mehrheit; 
 
 \section{Client}
 
+- findet Server über Broadcast
+- kann als Library genutzt werden
+- bietet Interface zu DXRaft
+
 \subsection{Exactly-Once-Semantics}
 
+- Problem: Wenn keine Antwort kommt (-> Netzwerk unzuverlässig), kann nicht festgestellt werden ob bearbeitet oder nicht; erneutes Senden möglicherweise doppelte Ausführung -> Ergebnisse müssen serverseitig gespeichert werden
+- Session speichern begrenzte Anzahl Anfrage, identifiziert durch Session Id und aufsteigene ID
+- jeder Client erstellt zunächst eine Session, serverseitig repliziert durch Raft-Algorithmus
+- 
+
 \subsection{API}
+
+- 
+
+\section{Softwaretests}
 
 \section{Zukünftige Verbesserungen}
