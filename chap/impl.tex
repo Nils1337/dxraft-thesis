@@ -13,45 +13,88 @@
 
 \section{Server}
 
+Die Server-Instanzen bilden das Raft-Cluster und führen den Raft-Algorithmus durch. Dafür müssen sie die im Raft-Algorithmus definierten Daten speichern und zwischen den Status wechseln können. Ein Server kann mit der \textit{RaftServer}-Klasse erstellt und gestartet werden. Im Folgenden werden die Probleme erläutert, die bei der Implementierung aufgekommen sind, und die Konzepte erklärt, mit denen diese gelöst wurden.
+
 \subsection{Messaging}
+\label{messaging}
 
-- Raft nutzt Messaging Ansatz, erlaubt unzuverlässiges Netzwerk/verlorene Nachrichten -> UDP für Kommunikation zwischen Server und Server/Clients
-- modular aufbauen mit Interfaces, um später bessere Implementierung zu nutzen (evtl. TCP...)
-- Ein Thread pro Socket -> übernimmt Annahme von Messages, Deserialisierung und Bearbeitung
-- extra Socket/Thread für Client-Anfragen
+Da DXRaft ein verteiltes System ist, müssen die Instanzen über das Netzwerk kommunizieren. Um diese zu implementieren gibt es offensichtlich viele verschiedene Ansätze. Um bessere Möglichkeiten zur Optimierung zu bieten und die Implementierung leichtgewichtig zu halten, wird hier auf die Verwendung von fertigen Implementierungen wie DXNet oder MPI verzichtet.
 
+Zunächst muss ein Transportschichtprotokoll festgelegt werden, mit dem die Kommunikation ablaufen soll. 
+Der Raft-Algorithmus nutzt eine Nachrichtensemantik, das heißt die Server senden sich gegenseitig einzelne Nachrichten und keinen Strom von Daten. Außerdem wurde beim Entwurf des Algorithmus bereits ein unzuverlässiges Netzwerk berücksichtigt und erlaubt verlorene Nachrichten. Deshalb wird in DXRaft UDP genutzt. Das Messaging ist jedoch mithilfe von \textit{NetworkService}-Interfaces modular aufgebaut, sodass der Nachrichtenaustausch nachträglich auch anders implementiert werden könnte. Es könnte z.B. sinnvoll sein, TCP-Verbindung zwischen den Raft-Servern aufzubauen, um die Verbindungen zu überwachen und schnell Ausfälle zu erkennen. Da in einem Raft-Cluster normalerweise eine eher kleine Anzahl an Servern teilnimmt, ist der Aufwand für das Verwalten der Verbindungen zu vernachlässigen. Bei der Verbindung von den Clients zum Server könnten das Verwalten der Verbindungen jedoch zu einem Problem werden: Alle Anfragen müssen stets über den Leader geleitet werden. In DXRaft sendet jeder Client seine Anfragen direkt an den Leader. Wenn TCP verwendet werden würde, müssten alle Clients eine Verbindung zum Leader aufbauen. Man könnte die Last jedoch vom Leader nehmen, indem auch die Follower Client-Verbindung halten können und dann das Weiterleiten an den Leader übernehmen. 
+
+Da an die interne Kommunikation andere Anforderungen gestellt sind als an die externe Kommunikation mit Clients, sind diese in DXRaft getrennt und es wird jeweils ein eigener Socket geöffnet. Jeder Socket wird von jeweils einem Thread überwacht, der die Nachrichten deserialisiert und je nach Nachrichtentyp verarbeitet. Um die Performance des gesamten Systems zu verbessern, wäre es eventuell sinnvoll, mehrere Threads pro Socket einzusetzen, um Nachrichten parallel zu verarbeiten.
+
+Da UDP zum Senden von Anfragen genutzt wird, muss das erneute Senden auf der Anwendungsebene übernommen werden. Dafür überwacht der Leader für jeden \textit{Append Entries}- und \textit{Vote-}Request an die Follower die Zeit bis zur Antwort. Falls er die Antwort nicht rechtzeitig erhält, sendet er die Anfrage erneut. Die Anfragen und Antworten werden mit einer aufsteigenden Zahl identifiziert, die der Leader beim Senden vergibt. Um die Korrektheit zu garantieren, sendet der Leader momentan an jeden Follower höchstens eine Anfrage gleichzeitig. Mit einem \textit{Append Entries}-Request können jedoch mehrere Log-Einträge versendet werden, falls während eines Anfrage-Antwort-Zyklus bereits mehrere Einträge an das Log angehangen wurden. Auch hier könnte man die Perfomance möglicherweise erhöhen, indem mehrere parallele Anfragen an die Follower erlaubt werden. Dann müsste jedoch sichergestellt werden, dass die Anfragen vom Follower in der richtigen Reihenfolge verarbeitet werden (z.B. durch Verwendung von TCP) und eine Flusskontrolle implementiert werden, die die Anzahl der parallel gesendeten Anfrage vorgibt.
 
 \subsection{Bootstrapping}
 
-- Jeder Server muss alle anderen Server kennen
-- Zunächst: statische Konfiguration in Konfigurationsdatei
-- Besser: dynamische Konfiguration, Server finden sich gegenseitig über Broadcast, ein Bootstrap-Server beginnt Aufbau eines Clusters, andere Server treten per Broadcast bei, bekommen Konfiguration und Log des Systems über normalen Änderungsmechanismus
+Um den Raft-Algorithmus durchzuführen und insbesondere festzustellen, wann eine Mehrheit der Server eine Anfrage akzeptiert hat, muss jeder teilnehmender Server alle anderen teilnehmenden Server kennen. Diese Information muss den Servern beim Bootstrapping bekannt gemacht werden. Eine einfache Möglichkeit ist, jeder Server-Instanz alle teilnehmenden Server mit ihren Adressen \textbf{statisch} beim Start per Konfigurationsdatei zu übergeben. Dies wird so auch in einigen Systemen, wie z.B. Zookeeper, so gelöst und ist auch in DXRaft eine Möglichkeit, die Server zu starten. 
+
+Dies ist jedoch nicht sehr komfortabel, da alle teilnehmenden Server mit ihren Adressen manuell oder mit einem eigens dafür geschriebenem Skript eingetragen werden müssen. Deshalb gibt es in DXRaft die Möglichkeit, dass die Server sich automatisch finden und den Cluster \textbf{dynamisch} aufbauen. Dazu muss eine Server-Instanz als Bootstrap-Instanz gewählt, die damit beginnt, ein Cluster aufzubauen. Er fügt sich selbst in die Liste der teilnehmenden Server ein und erstellt dafür einen Log-Eintrag, der über den normalen Raft-Mechanismus später auf alle teilnehmenden Server repliziert wird. Dann öffnet er einen Multicast-Socket und wartet, bis er darüber \textit{Join-Requests} von anderen Server erhält. Ein \textit{Join-Request} beinhaltet die Adresse des Servers, der dem Cluster beitreten möchte, sodass das Beitreten über den Beitrittsmechanismus (beschrieben in \ref{config-change}) gestartet werden kann. Da jeder beitretende Server dadurch auch das gesamte Log übergeben bekommt, bekommt er auch die Adressen aller Server mitgeteilt, die bereits vor ihm dem Cluster beigetreten sind. Falls die Bootstrap-Instanz, die initial der Leader ist, abstürzt, nachdem bereits ein oder mehrere Server dem Cluster beigetreten sind, wird der nächste Leader zur Bootstrap-Instanz. So kann der Boot-Vorgang auch weiterhin fortgeführt werden.
+
+Außerdem müssen die Server eindeutig identifiziert werden, damit der Raft-Algorithmus korrekt funktioniert. Deshalb hat jede Server-Instanz in DXRaft einen Integer-Identifier \textit{id}. Bei statischer Konfiguration muss die \textit{id} in der Konfigurationsdatei mit den Adressen der Server übergeben werden. Bei dynamischer Konfiguration werden die \textit{ids} ebenfalls dynamisch vergeben. Dazu wird wieder der Raft-Mechanismus selber verwendet: Die Bootstrap-Instanz gibt sich selbst die \textit{id} 0 und erstellt einen \textit{Atomic Integer}-Eintrag für die Vergabe der \textit{ids}. Die Server, die dem Cluster beitreten wollen, müssen sich dann zunächst nach dem Start eine \textit{id} besorgen. Dafür senden sie über IP-Multicast einen \textit{Assign-Id-Request}. Wenn die Bootstrap-Instanz (oder der aktuelle Leader) die Anfrage bekommt, führt ein atomares \textit{GetAndIncrement} auf dem \textit{Atomic Integer}-Eintrag durch und sendet die erhaltene \textit{id} zurück. Dann kann der Server den Beitritt zum Cluster wie bereits beschrieben starten.
+
+Wie bei Client-Anfragen muss auch bei \textit{Join-Requests} und \textit{Assign-Id-Request} über Multicast sichergestellt werden, dass diese nicht doppelt durchgeführt werden, falls der Sender keine Antwort auf seine Anfrage bekommt und die selbe Anfrage erneut sendet. Dazu bekommt jede Anfrage eine UUID \cite{uuid}. Eine dedizierte Session wird bei der Bootstrap-Instanz verwendet, um die Multicast-Anfrage und die Ergebnisse zu speichern, sodass diese nicht doppelt ausgeführt werden können (siehe \ref{exactly-once} für die Erklärung des Session-Mechanismus bei (Client-)Anfragen)). Diese dedizierte Session ist momentan unbegrenzt groß, da es normalerweise nicht allzu viele Multicast-Anfragen geben sollte, sodass sie den Speicher nicht zu sehr belastet. Die UUID wird auch mit der Antwort gesendet, damit der anfragende Server die Antwort identifizieren kann.
+
+Die statische Konfiguration ist etwas sicherer, falls einer oder mehrere  Server bereits während des Boot-Vorgangs abstürzen sollten. Da alle Server bereits alle Server kennen, können keine Anfragen bearbeitet werden, wenn keine Mehrheit erreicht werden kann. Bei dynamischer Konfiguration ist bei Anfragen während des Boot-Vorgangs nicht sichergestellt, dass bereits alle Server dem Cluster beigetreten sind. Falls dies nicht der Fall ist, dann ist die Fehlertoleranz eventuell schlechter als erwartet, da weniger Server am Cluster teilnehmen und die Mehrheit anders berechnet wird. Dies könnte gelöst werden, indem dem Cluster eine Zahl übergeben wird, die angibt, ab welcher Anzahl an beigetretenen Servern Anfragen beantwortet werden können. Dann kann jedoch ein einziger Server, der ausfällt, den Boot-Vorgang fehlschlagen lassen.
+
+Aus diesen Gründen kann man je nach Anforderungen per Parameter das Bootstrapping statisch oder dynamisch durchführen.
 
 \subsection{Persistenz}
 
-- Log schnell sehr groß im Speicher (viele Objekte), belastet schnell den Garbage Collector, wodurch Timeouts nicht mehr richtig funktionieren (große Pausen > 500ms)
-- Log muss persistiert werden, da nicht unendlich viel Arbeitsspeicher vorhanden
-- Muss theoretisch beliebig weit durchsucht werden können (durch Follower, die zu weit hinterher hinken)
-- Muss außerdem teilweise gelöscht werden können -> Normales Append-Log nicht geeignet
-- Einträge beliebig groß -> Länge muss mitgespeichert werden, kann nicht direkt zugreifen
-- Durchsuchen dauert ohne extra Datenstruktur sehr lange
-- Eine Möglichkeit: Extra Datei mit Einträgen Index->Adresse im Log; Nachteil: beim Appenden zwei Diskzugriffe, sehr langsam
-- Bessere Möglichkeit: Baumstruktur des Dateisystems nutzen, um schneller lesen zu können; Log in mehrere Dateien mit maximaler Anzahl an Einträgen/Größe teilen; Dateien nach erstem enthaltenem Index benennen; Beim Lesen: Log-Directory lesen, Datei, in welchem der Eintrag ist, kann anhand des Dateinamens bestimmt werden. Dann Datei einlesen; (BufferedReader/BufferedWriter nutzen) -> Schreiben ein Diskzugriff, Lesen einer um Datei zu bestimmmen und Datei einlesen beschränkt, da Größe beschränkt
-- Cache
+Im Raft-Algorithmus ist es vorgesehen, dass sich Server nach einem Absturz wieder erholen können und nach einem \textit{Recover}-Vorgang wieder am Cluster teilnehmen können, ohne das korrekte Arbeiten des Algorithmus zu stören. Dazu müssen wichtige Daten, wie z.B. der \textit{current term} oder das Log, synchron auf Festplatte gesichert werden, sodass diese bei einem möglichen Absturz nicht verloren gehen. Dies ist in DXRaft noch nicht implementiert und das Wiederherstellung wird moment dem Systemadminstrator überlassen (z.B. durch das Entfernen und erneute Hinzufügen des Servers zum Cluster über den Beitrittsmechanismus).
 
-- Persistenz von anderen Daten(current term, ...) noch nicht implementiert; Restart also noch nicht möglich
+Dennoch muss das Log bereits ohne die Möglichkeit der Wiederherstellung persistiert werden: Da bei jeder Anfrage ein Eintrag in das Log geschrieben wird, wird das Log schnell sehr groß. Falls das Log nur im Speicher gehalten wird, belastet es auch sehr stark den Garbage Collector und die Garbage-Collector-Pausen werden sehr lang (\textgreater 500 ms), wodurch die Timeouts nicht mehr richtig funktionieren und es zu unnötigen Leaderwechseln kommt. Außerdem kann das Log dann auch schnell den gesamten Speicher ausfüllen. Deswegen ist es nötig, das Log auf Festplatte zu persistieren.
+
+Da Festplattenzugriffe sehr viel mehr Zeit benötigen als Speicherzugriffe, muss das Log möglich effizient gespeichert werden und die Zugriffe minimiert werden, damit die Performance nicht zu sehr leidet.
+
+Das Log muss durch das Replizieren auf die anderen Server gelesen werden können. Insbesondere wird auf die neuesten Einträge häufig zugegriffen, während es unwahrscheinlich ist, dass auf ältere Einträge zugegriffen werden muss. Dennoch muss das Log theoretisch bis zum Anfang gelesen werden können, da Follower beliebig viele Nachrichten des Leaders nicht bekommen und dadurch beliebig viele Einträge nicht mitbekommen könnten. Um diese dann auf die betroffenen Follower zu replizieren, sobald diese wieder Nachrichten erhalten, müssen alte Einträge gelesen werden. Außerdem muss bei einem Beitritt eines neuen Servers das gesamte Log auf den neuen Server übertragen werden.
+
+Weiterhin müssen auch Einträge am Ende des Logs gelöscht werden können. Dies kann bei Leaderwechseln nötig werden, wenn der Leader die Logs der Follower seinem Log angleicht und es Einträge gibt, die im Log des Followers vorhanden sind aber nicht im Log des Leaders.
+
+Die Einträge des Logs sind beliebig groß, weswegen die Länge der Einträge in der Log-Datei mitgespeichert werden muss, um die Einträge wiederzufinden. Dadurch kann nicht direkt mit einem Index auf den entsprechenden Eintrag zugegriffen werden. Die naive Lösung ist, die Länge des Eintrags immer vor dem Eintrag zu speichern und beim Lesen eines Eintrags die Log-Datei von Beginn an zu durchsuchen, indem immer die Länge des nächsten Eintrags gelesen wird und diese Anzahl an Bytes übersprungen wird, bis der gesuchte Eintrag gefunden wurde. Dies ist aber offensichtlich keine gute Lösung, das Suchen eines Eintrags dadurch linear mit der Länge des Logs steigt.
+
+Eine weitere Möglichkeit wäre es, eine zusätzliche Datei anzulegen, die zu jedem Index die Adresse des Eintrags in der Log-Datei speichert. Dann könnte der Zugriff in konstanter Zeit erfolgen, falls man davon ausgeht, dass die Indexdatei in konstanter Zeit gelesen werden kann. Dann müsste jedoch beim Anhängen eines Log-Eintrags mindestens zwei Mal auf die Festplatte geschrieben werden, einmal um den Eintrag in die Log Datei zu schreiben und einmal um die Adresse in die Indexdatei zu schreiben. Da die Zugriffe wegen der Fehlertoleranz immer synchron geschehen müssen, erhöhen sie die Latenz von Client-Anfragen deutlich. Deshalb wäre es gut, wenn das Anhängen auf einen Schreib-Zugriff reduziert werden könnte.
+
+Dafür nutzt DXRaft die bereits vorhandene Baumstruktur des Dateisystems. Das Log wird in mehrere Dateien aufgeteilt, die eine maximale Größe haben. Sobald das Anhängen eines Log-Eintrags die maximale Größe der Log-Datei überschreiten würde, wird eine neue Log-Datei angelegt und der Eintrag in diese neue Datei geschrieben. Der Index des ersten Eintrags, der in der dieser Datei gespeichert ist, wird im Namen der Datei gespeichert. Beim Lesen eines Eintrags kann dann mithilfe des Verzeichnisses die Datei ermittelt werden, in der dieser Eintrag gespeichert ist. Die Datei kann dann wie in der naiven Lösung nach dem Eintrag durchsucht werden. Dadurch ist das Lesen durch die maximale Größe einer Log-Datei beschränkt und das Schreiben benötigt normalerweise nur einen Schreibzugriff. Dazu kommt nur das Anlegen einer neuen Datei, falls eine Log-Datei zu groß geworden ist. Um die Schreib- und Lesezugriffe auf die Festplatte weiter zu minimieren, wird außerdem gepuffert gelesen und geschrieben (mit den \textit{BufferedReader}- und \textit{BufferedWriter}-Klassen aus dem \textit{java.io}-Package).
+		
+Dies könnte durch Batch-Verarbeitung von Anfragen noch weiter reduziert werden, wobei dann nur ein Schreibzugriff für das Anhängen mehrerer Einträge nötig wäre. Da dies jedoch nicht ganz einfach zu implentieren ist und die Performance auch ohne Batch-Verarbeitung bereits ausreichend ist, wurde dies im Rahmen dieser Arbeit noch nicht implementiert.
+
+Da die neuesten Einträge des Logs häufig gelesen werden müssen, werden diese außerdem noch in einem Cache gehalten. Der Cache hält die letzten \textit{n} Einträge im Speicher und es wird der älteste entfernt, falls der Cache voll ist und ein neuer Einträg an das Log angehängt wird. Da im Normalbetrieb nur auf die neuesten Einträge zugegriffen wird, kann durch einen ausreichen großen Cache erreicht werden, dass im Normalbetrieb kein Lesezugriff auf die Festplatte erfolgt.
 
 \subsection{Änderungen des Clusters}
+\label{config-change}
 
 - nicht ganz trivial, da Teilnehmer Teil der entscheidenden Mehrheit; 
 
+\subsection{Timer}
+
+Die Server müssen aus unterschiedlichen Gründen die Zeit im Auge behalten und einen Timeout auslösen, falls ein Ereignis zu lange auf sich warten lässt:
+
+\begin{itemize}
+	\item Leader müssen periodisch einen Heartbeat senden, falls das System gerade keine Anfragen bearbeitet und das System gerade keine Anfragen bearbeitet.
+	\item Candidates müssen eine neue Wahl starten, wenn die Wahl in einer Zeitspanne keinen Sieger hervorgebracht hat.
+	\item Follower müssen einen eine Wahl starten, wenn sie zu lange keine Nachricht vom Leader erhalten haben.
+\end{itemize}
+
+Diese Funktionalität wird durch die \textit{RaftTimer}-Klasse bereitgestellt. Diese verwendet intern einen \textit{ScheduledExecutorService}, der, wenn aktiviert, auslöst, sobald eine vorher übergebene Zeit abgelaufen ist. Dann wird die \textit{processTimeout()}-Methode eines vorher übergebenen \textit{TimeoutHandlers} aufgerufen. 
+
+Damit die Server im Cluster möglichst nicht zur gleichen Zeit einen Timeout auslösen, sollte die Zeitspanne randomisiert werden. Dafür kann der \textit{RaftTimer}-Klasse ein fixe Zeit \textit{f} und zusätzliche randomisierte Zeit \textit{r} übergeben werden. Der Timer löst dann frühestens aus, nachdem \textit{f} abgelaufen ist, und spätestens, nachdem \textit{f+r} abgelaufen ist.
+
+Außerdem wird der Timer auch für die Überwachung von \textit{Append Entries}- und \textit{Vote-}Requests genutzt. Diese müssen nach dem Ablauf des Timers erneut gesendet werden, falls der Leader in dieser Zeit keine Antwort erhalten hat (siehe \ref{messaging}).
+
 \section{Client}
 
-- findet Server über Broadcast
-- kann als Library genutzt werden
-- bietet Interface zu DXRaft
+Der Client bildet die Schnittstelle von DXRaft zur Anwendung. Er wird als Library in die Anwendung eingebunden und leitete die Anfragen von der Anwendung an das DXRaft-Cluster weiter. Standardmäßig werden die DXRaft-Server automatisch über Multicast gefunden. Falls dies nicht möglich, muss dem Client eine Liste der Server mit Adressen übergeben werden. Bei der Implementierung des Clients ist es vor allem wichtig, dass Fehler, wie z.B. das Ausbleiben einer Antwort von einem Server, korrekt behandelt wird. In \ref{exactly-once} wird beschrieben, wie es erreicht werden kann, dass die Anfragen immer genau ein mal ausgeführt werden. In \ref{api} wird dann die API genau beschrieben.
 
 \subsection{Exactly-Once-Semantics}
+\label{exactly-once}
+
+Wenn der Client keine Antwort auf seine Anfrage bekommt, dann kann er nicht feststellen, ob die Anfrage erfolgreich durchgeführt wurde oder nicht. Wenn er dann sofort aufgeben würde, wäre das System nicht fehlertolerant. Deswegen sendet er die gleiche Anfrage erneut, um dem Server zu signalisieren, dass er keine Antwort erhalten hat. Dies könnte jedoch ohne weitere Maßnahmen dazu führen, dass die Anfrage mehrfach bearbeitet wird. Das wäre für den Nutzer jedoch unerwartet und würde bedeuten, dass das System nicht korrekt arbeitet. Um die mehrfache Bearbeitung einer Anfrage zu verhindern, müssen die Anfragen mit dem Ergebnis serverseitig gespeichert werden, sodass der Server feststellen kann, ob er die Anfrage bereits einmal erhalten hat und das Ergebnis zurücksenden kann, falls diese bereits durchgeführt wurde.
+
+Da nicht alle Anfragen und Ergebnisse  
+
 
 - Problem: Wenn keine Antwort kommt (-> Netzwerk unzuverlässig), kann nicht festgestellt werden ob bearbeitet oder nicht; erneutes Senden möglicherweise doppelte Ausführung -> Ergebnisse müssen serverseitig gespeichert werden
 - Session speichern begrenzte Anzahl Anfrage, identifiziert durch Session Id und aufsteigene ID
@@ -59,6 +102,7 @@
 - 
 
 \subsection{API}
+\label{api}
 
 - 
 
