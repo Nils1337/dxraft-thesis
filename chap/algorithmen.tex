@@ -54,6 +54,7 @@ Tatsächlich gibt es auch Einigungsalgorithmen, die immer terminieren, jedoch da
 Alle in dieser Arbeit vorgestellten Einigungsalgorithmen basieren auf dem \textit{Crash-Recovery-Modell}. Server arbeiten asynchron, können abstürzen und nach einem Neustart wieder am Cluster teilnehmen. Außerdem kann das Netzwerk unzuverlässig sein. Nachrichten können also beliebig viel Zeit von einem Knoten zu einem anderen Knoten benötigen, verloren gehen oder die Reihenfolge ändern. Ziel dabei ist, dass der Einigungsalgorithmus solange eine Einigung erzielen kann, wie eine Mehrheit der Server funktioniert und erreichbar ist. Die teilnehmenden Server dürfen sich jedoch nicht beliebig falsch verhalten, also keine falschen Nachrichten schicken und keine Systemzustände erreichen, die nicht vorgesehen sind. Es gibt auch Einigungsalgorithmen, die gegen solche byzantinischen Fehler geschützt sind \cite{byzantine-paxos}, jedoch erhöht dies die Komplexität deutlich und es werden im Vergleich zum Crash-Recovery-Modell mehr Server benötigt, um sich vor der gleichen Anzahl an fehlerhaften bzw. ausfallenden Servern zu schützen, was das System insgesamt langsamer macht.
 
 \section{Einigungsalgorithmen}
+\label{algos}
 
 \subsection{Paxos}
 
@@ -89,7 +90,7 @@ Paxos wurde bereits in anderen Arbeiten implementiert \cite{paxos-made-complex, 
 
 \subsection{Zab}
 
-\todo{Kerneigenschaften genau formulieren, eigene Grafik zum Paxos Randfall erstellen}
+\todo[inline]{überarbeiten/erweitern, eigene Grafik zum Paxos Randfall erstellen}
 
 Zookeeper implementiert einen Algorithmus namens Zab \cite{zab}. Zab ist ebenfalls ein Einigungsalgorithmus, der jedoch leicht andere Garantien bietet. Die Autoren nennen ihr Modell ein \textit{Primary-Backup System}. Es gibt zu jedem Zeitpunkt höchstens einen Primary-Server, der Vorschläge für den nächsten Befehl an die anderen Server im Cluster senden kann. Die anderen Server sind exakte Backup-Replikate des Primary-Servers. Falls der Primary-Server ausfällt, wird eine neuer Primary-Server aus den vorhandenen Backup-Servers gewählt. Die Autoren erklären den Unterschied zu Paxos so: Zab soll garantieren, dass jede Zustandsänderung von allen vorherigen Zustandsänderungen abhängt und somit niemals vor diesen ausgeführt werden darf. Außerdem sollen von einem Proposer mehrere Befehle, hier Transaktionen genannt, einzeln und nebenläufig vorgeschlagen werden können, ohne dass sich ihre Reihenfolge ändern kann. Paxos kann in diesem Randfall jedoch nicht die initiale Reihenfolge garantieren (siehe Abbildung \ref{fig:paxos_fail}).
 

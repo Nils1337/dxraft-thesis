@@ -3,13 +3,28 @@
 
 \section{Überblick}
 
-- Warum Raft? Einfacher zu implementieren als Paxos, Zab schon in Open-Source implementiert (Zookeeper), Vorteil von Zab nicht so relevant, entspricht nicht dem Nutzungsprofil, 
-- sowohl standalone als auch als library
-- leichtgewichtig, performant, ausbaumöglichkeiten -> keine großen Frameworks/Libraries benutzen
-- Warum Java? Soll für DXRAM verwendet werden (als Library) und DXRAM in Java; Typsicherheit vorteilhaft, da Einigungsalgorithmus nicht trivial; sehr verbreitet, mit guten Tools/Libraries
-- Gradle
-- möglichst einfache Nutzung und Bootstrapping
-- Konzept: Server verbinden sich im Cluster, Client bietet API für Nutzer, API: Speicherung von Key-Value-Daten (Write/Read/Delete), verteilte atomic integers (mit atomic incrment, decrement)
+Um ein System wie in \ref{ziele} beschrieben zu entwickeln, muss zunächst ein Algorithmus festgelegt werden, der die gewünschten Eigenschaften hat. Dieser Algorithmus wird den Kern des Systems bilden. In \ref{algo} wird diese Entscheidung erläutert. Dann wird in \ref{sprache} die Wahl der Programmiersprache erklärt und in \ref{konzept} auf die grundlegenden Konzepte des zu entwickelnden Systems eingegangen.
+
+\subsection{Wahl des Algorithmus}
+\label{algo}
+
+Die Kandidaten sind die in \ref{algos} vorgestellten Algorithmen Paxos, Zab und Raft. Die Beschreibung von Paxos ist sehr theoretisch und nicht praxisnah gehalten, was zu Problemen bei der Implementierung führen könnte, die nicht im Dokument beschrieben sind und für die somit zeitaufwändig eigene Lösungen entworfen werden müssten. Dies bestätigen die wenigen Paxos-Implementierungen und die Berichte von Autoren, die auf Paxos basierende Systeme entwickelt habe und von Schwierigkeiten bei der Implementierung berichten. Zab wurde speziell für Zookeeper entwickelt und wurde soweit bekannt in keinem anderen System implementiert. Der Vorteil von Zab gegenüber Paxos und Raft, dass nebenläufige Anfragen von Clients die Reihenfolge nicht ändern können, ist zumindest für einfache Koordinierungsaufgaben, wie sie das System für DXRAM übernehmen soll, nicht relevant. Falls diese Eigenschaft im Nachhinein benötigt werden sollte, könnte man dies, wie die Autoren von Zab auch anmerken, mit Paxos oder Raft ebenfalls implementieren. Die Beschreibung von Raft ist sehr praxisnah und es wird auf viele Implementierungsdetails eingegangen. Außerdem sind bereits einige Implementierungen vorhanden, was darauf schließen lässt, dass Raft einfacher zu implementieren ist als Paxos. Deshalb wurde Raft als Algorithmus für das zu entwickelnde System ausgewählt.
+
+\subsection{Wahl der Programmiersprache}
+ \label{sprache}
+
+Als Programmiersprache für das zu entwickelnde System wurde Java gewählt. Java ist eine in der Industrie weit verbreitete Sprache, die für die es viele gut entwickelte Tools und Bibliotheken gibt. Ein Vorteil gegenüber dynamischen Programmiersprachen wie Python ist auch die Typsicherheit, die bereits zur Compilezeit sichergestellt wird. Dies kann bei der Erkennung von subtilen Fehlern im Code helfen, was bei eher komplexeren Systemen wie einem Einigungsalgorithmus wichtig ist. Außerdem erleichtert die Wahl von Java die vorgesehene Integration in DXRAM, da DXRAM ebenfalls in Java implementiert ist. Für das Build-Management wird Gradle verwendet.
+
+\subsection{Konzept der Implementierung}
+ \label{konzept}
+ 
+Die Implementierung soll möglichst performant sein und später Möglichkeiten zur Optimierung bieten. Dazu ist es sinnvoll, sie möglichst leichtgewichtig zu gestalten und keine großen Frameworks oder Bibliotheken zu verwenden. Außerdem soll die Nutzung möglichst einfach sein. Insbesondere sollte das Bootstrapping möglichst automatisch ablaufen können, sodass der Einsatz in einem verteilten System keine zusätzlichen Tools benötigt.
+
+Das System besteht aus Server-Instanzen und Clients. Die Server-Instanzen bilden ein Cluster und führen den Einigungsalgorithmus aus. Die Clients verbinden sich mit dem Cluster und bieten dem Nutzer eine Schnittstelle zum System an. Server und Clients sollen sowohl Standalone als auch als Bibliothek genutzt werden können. Das nutzen als Bibliothek hat den Vorteil, dass für das System kein eigener Prozess gestartet werden muss.
+
+Die Schnittstelle soll auf unterster Ebene eine Speicherung von Key-Value-Daten ermöglichen. Die Daten sollen mit einem String identifiziert werden und Daten von beliebigem Typ speichern. Außerdem sollen beliebige atomare Operationen auf den Daten ausgeführt werden können. Mit dieser Schnittstelle könnten dann weiter abstrahierte Funktionalitäten bzw. Klassen implementiert werden, wie z.B. eine \textit{DistributedAtomicInteger}-Klasse, die atomare Operationen auf einem im System gespeichertem Integer-Wert ausführt.
+
+Da das System in DXRAM verwendet werden soll, speziell dafür entwickelt wird und Raft als Einigungsalgorithmus nutzen wird, soll das System DXRaft heißen.
 
 \section{Server}
 
@@ -63,6 +78,8 @@ Dies könnte durch Batch-Verarbeitung von Anfragen noch weiter reduziert werden,
 
 Da die neuesten Einträge des Logs häufig gelesen werden müssen, werden diese außerdem noch in einem Cache gehalten. Der Cache hält die letzten \textit{n} Einträge im Speicher und es wird der älteste entfernt, falls der Cache voll ist und ein neuer Einträg an das Log angehängt wird. Da im Normalbetrieb nur auf die neuesten Einträge zugegriffen wird, kann durch einen ausreichen großen Cache erreicht werden, dass im Normalbetrieb kein Lesezugriff auf die Festplatte erfolgt.
 
+Da auch auf der Festplatte nicht unendlich Speicherplatz vorhanden ist, kann das Log auch diesen Platz irgendwann aufbrauchen. Damit das System dann weiterhin funktioniert, muss eine Kompaktierung des Logs implementiert werden. Dazu haben die Raft-Autoren ebenfalls einen Mechanismus entwickelt, der jedoch in DXRaft noch nicht implementiert wurde.
+
 \subsection{Änderungen der Clusterkonfiguration}
 \label{config-change}
 
@@ -94,7 +111,7 @@ Außerdem wird der Timer auch für die Überwachung von \textit{Append Entries}-
 
 \section{Client}
 
-Der Client bildet die Schnittstelle von DXRaft zur Anwendung. Er wird als Library in die Anwendung eingebunden und leitete die Anfragen von der Anwendung an das DXRaft-Cluster weiter. Standardmäßig werden die DXRaft-Server automatisch über Multicast gefunden. Falls dies nicht möglich, muss dem Client eine Liste der Server mit Adressen übergeben werden. Bei der Implementierung des Clients ist es vor allem wichtig, dass Fehler, wie z.B. das Ausbleiben einer Antwort von einem Server, korrekt behandelt wird. In \ref{exactly-once} wird beschrieben, wie es erreicht werden kann, dass die Anfragen immer genau ein mal ausgeführt werden. In \ref{api} wird dann die API genau beschrieben.
+Der Client bildet die Schnittstelle von DXRaft zur Anwendung. Er wird als Library in die Anwendung eingebunden und leitete die Anfragen von der Anwendung an das DXRaft-Cluster weiter. Standardmäßig werden die DXRaft-Server automatisch über Multicast gefunden. Falls dies nicht möglich, muss dem Client eine Liste der Server mit Adressen übergeben werden. Bei der Implementierung des Clients ist es vor allem wichtig, dass Fehler, wie z.B. das Ausbleiben einer Antwort von einem Server, korrekt behandelt wird. In \ref{sessions} wird beschrieben, wie es erreicht werden kann, dass die Anfragen immer genau ein mal ausgeführt werden. In \ref{api} wird dann die API genau beschrieben.
 
 \subsection{Sessions}
 \label{sessions}
