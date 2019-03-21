@@ -24,6 +24,7 @@
 \usepackage[inner=4cm,outer=3cm,top=3cm,bottom=4cm,includeheadfoot]{geometry}
 \usepackage{fancyhdr}
 \usepackage{graphicx}
+\usepackage{subcaption}
 
 % captions and figures
 \usepackage{subcaption}

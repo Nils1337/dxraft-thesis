@@ -77,7 +77,7 @@ Die Einigung auf einen Wert erfolgt in zwei Phasen:
 		\end{enumerate}
 	\item
 		\begin{enumerate}[label=\alph*)]
-		\item Wenn der Proposer von einer Mehrheit der Acceptors eine Antwort auf seine Prepare-Nachricht mit der Proposal Number \textit{n}] erhalten hat, sendet er eine Accept-Nachricht an die Acceptors mit \textit{n} und einem Wert \textit{v}, auf den sich geeinigt werden soll.
+		\item Wenn der Proposer von einer Mehrheit der Acceptors eine Antwort auf seine Prepare-Nachricht mit der Proposal Number \textit{n} erhalten hat, sendet er eine Accept-Nachricht an die Acceptors mit \textit{n} und einem Wert \textit{v}, auf den sich geeinigt werden soll.
 		\item Die Acceptors akzeptieren den vorgeschlagenen Wert \textit{v} mit der Proposal Number \textit{n}, falls sie noch nicht auf eine Prepare-Nachricht mit höherer Proposal Number geantwortet haben.
 	\end{enumerate}
 \end{enumerate}
@@ -92,16 +92,15 @@ Paxos wurde bereits in anderen Arbeiten implementiert \cite{paxos-made-complex, 
 
 \todo[inline]{überarbeiten/erweitern, eigene Grafik zum Paxos Randfall erstellen}
 
-Zookeeper implementiert einen Algorithmus namens Zab \cite{zab}. Zab ist ebenfalls ein Einigungsalgorithmus, der jedoch leicht andere Garantien bietet. Die Autoren nennen ihr Modell ein \textit{Primary-Backup System}. Es gibt zu jedem Zeitpunkt höchstens einen Primary-Server, der Vorschläge für den nächsten Befehl an die anderen Server im Cluster senden kann. Die anderen Server sind exakte Backup-Replikate des Primary-Servers. Falls der Primary-Server ausfällt, wird eine neuer Primary-Server aus den vorhandenen Backup-Servers gewählt. Die Autoren erklären den Unterschied zu Paxos so: Zab soll garantieren, dass jede Zustandsänderung von allen vorherigen Zustandsänderungen abhängt und somit niemals vor diesen ausgeführt werden darf. Außerdem sollen von einem Proposer mehrere Befehle, hier Transaktionen genannt, einzeln und nebenläufig vorgeschlagen werden können, ohne dass sich ihre Reihenfolge ändern kann. Paxos kann in diesem Randfall jedoch nicht die initiale Reihenfolge garantieren (siehe Abbildung \ref{fig:paxos_fail}).
+Ein weiterer Einigungsalgorithmus ist Zab \cite{zab}. Zab wurde entwickelt, weil die Autoren beobachtet haben, dass Statusänderungen von einem Client meist von vorherigen Statusänderungen abhängen. Das ist insbesondere dann ein Problem, wenn es Clients erlaubt ist, mehrere Anfragen nebenläufig zu senden. Bei Systemen, die eine Replicated-State-Machine implementieren, wie Paxos, ist dann nicht garantiert, dass die Anfragen in der Reihenfolge ausgeführt werden, in der der Client sie gesendet hat. Abbildung \ref{fig:paxos_fail} zeigt einen Paxos-Randfall, in dem Statusänderungen durch Ausfälle von zwei Proposern in einer anderen Reihenfolge ausgeführt werden, als sie vom ersten Proposer vorgeschlagen wurden. Um dies bei Paxos zu umgehen, müssen mehrere Statusänderungen eines Proposers in einen einzelnen Vorschlag verpackt werden und es darf nur ein Vorschlag gleichzeitig gesendet werden. Bei solch einem Batch-Processing leidet jedoch entweder der Durchsatz oder die Latenz, abhängig von der Batch-Größe, weshalb sich die Autoren dazu entschieden haben, einen neuen Algorithmus zu entwickeln.
+Die Autoren nennen ihr Modell ein \textit{Primary-Backup System}. Es gibt zu jedem Zeitpunkt höchstens einen Primary-Server, der Vorschläge für den nächsten Befehl an die anderen Server im Cluster senden kann. Die anderen Server sind exakte Backup-Replikate des Primary-Servers. Falls der Primary-Server ausfällt, wird eine neuer Primary-Server aus den vorhandenen Backup-Servern gewählt.
 
 \begin{figure}[H]
 	\centering
-	\includegraphics[height=350px]{img/paxos_fail.png}
-	\caption{Randfall von Paxos, bei dem sich die Reihenfolge von Zustandsänderungen ändern kann, nachdem sie bereits in einer anderen Reihenfolge von einen Proposer vorgeschlagen wurden. P1 schlägt die Werte A und B für die Indizes 27 und 28 vor. P3 schlägt jedoch die Werte C und B für die Indizes 27 und 28 vor und bekommt dafür eine Mehrheit, obwohl B eigentlich von A abhängig ist.}
+	\includegraphics[width=\linewidth]{img/paxos_fail_2.png}
+	\caption{Randfall von Paxos, bei dem sich die Reihenfolge von Zustandsänderungen ändern kann, nachdem sie bereits in einer anderen Reihenfolge von einen Proposer vorgeschlagen wurden. P1 schlägt die Werte A und B für die Indizes 1 und 2 vor. P3 schlägt jedoch die Werte C und B für die Indizes 1 und 2 vor und bekommt dafür eine Mehrheit. B könnte jedoch von A abhängig sein, da die Werte in dieser Reihenfolge von P1 vorgeschlagen wurden.}
 	\label{fig:paxos_fail}
 \end{figure}
-
-Bei Paxos kann dieser Randfall jedoch umgangen werden, indem mehrere Transaktionen eines Proposers in eine einzelne Paxos-Vorschlag verpackt werden und immer nur ein Vorschlag gleichzeitig aktiv sein kann. Dies schadet laut den Autoren jedoch entweder dem Durchsatz oder der Latenz, weshalb sie sich für die Entwicklung von Zab entschieden haben.
 
 Zab teilt den Algorithmus in drei Phasen ein:
 \begin{enumerate}
