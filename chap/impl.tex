@@ -128,6 +128,9 @@ Durch die Anpassung der maximalen Anzahl an Sessions an die Anforderungen sollte
 
 Damit die Sessions dem gesamten DXRaft-Cluster bekannt sind und bei einem Leaderwechsel weiter funktionieren, werden die \textit{CreateSession}- und \textit{PurgeSession}-Requests genau so behandelt wie andere Anfragen, das heißt sie werden mit dem Raft-Mechanismus repliziert und erst ausgeführt, wenn sie auf eine Mehrheit der Server repliziert wurden. Dadurch werden die Sessions auf jedem Server erstellt und die Server sind sich einig, wann eine Session geleert oder gelöscht wird.
 
+\subsection{Messaging}
+
+Der Client sollte Threadsafe sein und mehrere Anfragen gleichzeitig senden können. Deswegen übernimmt ein dedizierter Receiver-Thread die Annahme der Antworten vom Server. Da bisher alle Methoden der Client-API blockierend sind, werden die Java-Methoden \textit{wait()} und  \textit{notify()} genutzt, um die Threads zu blockieren. Der aufrufende Thread sendet die Anfrage an den Server, fügt das Request-Objekt in die Liste der ausstehenden Anfragen ein und ruft dann \textit{wait()} auf dem Request-Objekt auf. Wenn der Receiver-Thread eine Nachricht vom Server erhält und die fertig deserialisiert ist, ruft er auf dem dazugehörigen Request-Objekt \textit{notify()} auf, wodurch der wartende Thread aufgeweckt wird und nun auf die Antwort zugreifen kann. In den Client könnten so auch sehr einfach nicht-blockierende Methoden eingebaut werden.
 
 \subsection{API}
 \label{api}

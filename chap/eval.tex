@@ -5,6 +5,8 @@
 
 \subsection{Zookeeper}
 
+\subsection{Consul}
+
 \section{Benchmark}
 
 \section{Ergebnisse}
@@ -24,6 +26,30 @@
 	\caption{Benchmark mit einem Client und drei Server.}
 \end{figure}
 
+\subsection{Latenz}
+
+\subsection{Durchsatz}
+
+\subsection{Verzögerungen in DXRaft}
+
+\begin{figure}[t]
+	\centering
+	\begin{subfigure}[t]{1\textwidth}
+		\includegraphics[width=\textwidth]{img/request_avg_timing.png}
+		\caption{Durchschnittliche Anfrage.}
+	\end{subfigure}
+	\begin{subfigure}[t]{1\textwidth}
+		\includegraphics[width=\textwidth]{img/request_max_timing.png}
+		\caption{Maximale Zeiten.}
+	\end{subfigure}
+	\begin{subfigure}[t]{1\textwidth}
+		\includegraphics[width=\textwidth]{img/request_longest_timing.png}
+		\caption{Längste Anfrage.}
+	\end{subfigure}
+\end{figure}
+
+\section{Leader Election}
+
 \begin{figure}[t]
 	\centering
 	\begin{subfigure}[t]{0.45\textwidth}
@@ -41,18 +67,3 @@
 	\caption{Latenz bei einem Leader-Crash.}
 \end{figure}
 
-\begin{figure}[t]
-	\centering
-	\begin{subfigure}[t]{1\textwidth}
-		\includegraphics[width=\textwidth]{img/request_avg_timing.png}
-		\caption{Durchschnittliche Anfrage.}
-	\end{subfigure}
-	\begin{subfigure}[t]{1\textwidth}
-		\includegraphics[width=\textwidth]{img/request_max_timing.png}
-		\caption{Maximale Zeiten.}
-	\end{subfigure}
-	\begin{subfigure}[t]{1\textwidth}
-		\includegraphics[width=\textwidth]{img/request_longest_timing.png}
-		\caption{Längste Anfrage.}
-	\end{subfigure}
-\end{figure}
