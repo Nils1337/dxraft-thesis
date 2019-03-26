@@ -89,6 +89,7 @@ In Implementierungen wird meist eine Client-Server-Architektur verwendet. Dabei 
 Paxos wurde bereits in anderen Arbeiten implementiert \cite{paxos-made-complex, paxos-made-live}. Die Autoren berichten jeweils von nicht-trivialen Problemen, auf die sie während der Arbeit an einer Implementierung gestoßen sind. Dafür mussten sie unter anderem Optimierungen vornehmen, die nicht in der initialen Beschreibung des Algorithmus enthalten sind. Außerdem gibt es sehr wenige Implementierungen, insbesondere welche die Open-Source sind.
 
 \subsection{Zab}
+\label{zab}
 
 Ein weiterer Einigungsalgorithmus ist Zab \cite{zab}. Zab wurde entwickelt, weil die Autoren beobachtet haben, dass Statusänderungen meist von vorherigen Statusänderungen abhängen. Das ist insbesondere dann ein Problem, wenn es Clients erlaubt ist, mehrere Anfragen nebenläufig zu senden. Bei Systemen, die eine Replicated-State-Machine implementieren, wie Paxos, ist dann nicht garantiert, dass die Anfragen in der Reihenfolge ausgeführt werden, in der der Client sie gesendet hat. Abbildung \ref{fig:paxos_fail} zeigt einen Paxos-Randfall, in dem Statusänderungen durch Ausfälle von zwei Proposern in einer anderen Reihenfolge ausgeführt werden, als sie vom ersten Proposer vorgeschlagen wurden. Um dies bei Paxos auszuschließen, können mehrere Statusänderungen eines Proposers in einen einzelnen Vorschlag verpackt werden und es darf nur ein Vorschlag gleichzeitig gesendet werden. Bei solch einem Batch-Processing leidet jedoch entweder der Durchsatz oder die Latenz, abhängig von der Batch-Größe, weshalb sich die Autoren dazu entschieden haben, einen neuen Algorithmus zu entwickeln.
 Die Autoren nennen ihr Modell ein \textit{Primary-Backup System}. Es gibt zu jedem Zeitpunkt höchstens einen Primary-Server, der Vorschläge für die nächste Transaktion an die anderen Server im Cluster senden kann. Die anderen Server sind exakte Backup-Replikate des Primary-Servers. Falls der Primary-Server ausfällt, wird eine neuer Primary-Server aus den vorhandenen Backup-Servern gewählt.
@@ -117,6 +118,7 @@ Zab läuft im Gegensatz zu Paxos in drei Phasen ab (siehe \ref{fig:zab}):
 \end{enumerate}
 
 \subsection{Raft}
+\label{raft}
 
 Raft \cite{raft, raft-thesis} basiert ebenso wie Paxos auf dem Replicated-State-Machine-Modell basiert. Die Autoren begründen die Entwicklung von Raft damit, dass Paxos schwierig zu verstehen und zu implementieren sei. Deswegen wollten sie einen einfacheren Algorithmus entwickeln, der auf dem selben Modell basiert. Raft geht ebenso wie Paxos von einem Crash-Recovery-Modell und einem unzuverlässigen Netzwerk aus.
 Im Gegensatz zu Paxos wird das Einigungsproblem bei Raft in drei Teilprobleme aufgeteilt:
