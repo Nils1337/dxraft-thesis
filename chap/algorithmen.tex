@@ -46,7 +46,9 @@ Da der Algorithmus keine Fehlertoleranz garantieren kann und blockiert, sobald e
 
 Zum Verständnis von Einigungsalgorithmen ist noch ein weiteres Theorem wichtig: Das FLP-Theorem \cite{flp}. Es zeigt, dass es keinen Einigungsalgorithmus in einem \textbf{asynchronen System} geben kann, der bei Knotenausfällen korrekt arbeitet und immer terminiert. Ähnlich wie bei CAP-Theorem kann man hier ebenfalls drei Eigenschaften formulieren, die ein Algorithmus nicht gleichzeitig erfüllen kann: Sicherheit, Verfügbarkeit und Fehlertoleranz. Ein Unterschied zum CAP-Theorem ist, dass hier von einem schwächeren Modell ausgegangen wird: Die teilnehmenden Server können zwar abstürzen, das Netzwerk ist jedoch zuverlässig und es kann insbesondere keine Netzwerkpartitionierung geben.
 Alle Einigungsalgorithmen, die auf einem asynchronem Modell basieren, sind also nur partiell korrekt. Für die in dieser Arbeit vorgestellten Algorithmen bedeutet dies, dass sie sich auf die Eigenschaften Sicherheit und Fehlertoleranz fokussieren. Dadurch kann man im Allgemeinen nicht beweisen, dass sie auch terminieren. Meist wird durch geschickt gewählte Timeouts oder Ähnliches in der Praxis erreicht, dass die Algorithmen zur meisten Zeit terminieren und zu einem Ergebnis kommen.
-Tatsächlich gibt es auch Einigungsalgorithmen, die immer terminieren, jedoch dafür die Sicherheit oder die Fehlertoleranz opfern. Beispiele für Algorithmen, bei denen es zugunsten der Terminierung manchmal falsche Ergebnisse geben kann, sind der 3-Phase-Commit-Algorithmus \cite{pc} und probabilistische Algorithmen wie Proof-of-Work in Blockchains. \todo[inline]{genauer erklären}
+Tatsächlich gibt es auch Einigungsalgorithmen, die immer terminieren, jedoch dafür die Sicherheit oder die Fehlertoleranz opfern. Beispiel für einen Algorithmen, bei denen es zugunsten der Terminierung manchmal falsche Ergebnisse geben kann, sind der 3-Phase-Commit-Algorithmus \cite{pc} und probabilistische Algorithmen wie Proof-of-Work in Blockchains. \\
+Beim 3-Phase-Commit-Algorithmus wird im Gegensatz zum 2-Phase-Commit-Algorithmus bei Fehlern nicht blockiert, sondern die Transaktion wird dann abgebrochen. Dazu wird eine \glqq pre-commit\grqq-Phase eingeführt, mit der sichergestellt wird, dass die Knoten sich bei Fehlern darüber einig sind, ob die Transaktion durchgeführt oder abgebrochen wird. \\
+Bei Proof-of-Work wird der Konsensus darüber erreicht, dass für das Anhängen eines Blocks an die Blockchain viele Ressourcen aufgewendet werden müssen (z.B. Rechenzeit).  Da die Aufgaben, die dafür gelöst werden müssen, jedoch probabilistisch sind und es Zeit benötigt, bis der neue Block alle Knoten erreicht hat, kann es dabei Verzweigungen der Blockchain geben, wenn zwei Knoten die Aufgabe korrekt gelöst haben und einen neuen Block erstellen. Es wird sich also nicht immer korrekt geeinigt. Diese Konflikte müssen dann im Nachhinein irgendwie aufgelöst werden. Bei Bitcoin \cite{bitcoin} geschieht dies beispielsweise dadurch, dass die Knoten die längste Blockchain als die \glqq richtige\grqq{} ansehen. Dadurch wird der Konflikt irgendwann aufgelöst.
 
 
 \section{Crash-Recovery-Modell}
@@ -58,7 +60,14 @@ Alle in dieser Arbeit vorgestellten Einigungsalgorithmen basieren auf dem \texti
 
 \subsection{Paxos}
 
-Der bekannteste Einigungsalgorithmus ist Paxos \cite{paxos, paxos-made-simple}. Paxos implementiert eine \textit{Replicated State Machine}. \todo[inline]{Grafik zur Replicated State Machine} Bei diesem Modell besitzt jeder Knoten eine Zustandsmaschine, die Befehle ausführt und dadurch den Zustand ändert. Der Einigungsalgorithmus kümmert sich darum, dass die Befehle auf allen Knoten in der gleichen Reihenfolge durchgeführt werden, sodass der Zustand auf allen Knoten konsistent ist.
+\begin{figure}[H]
+	\centering
+	\includegraphics[width=\linewidth]{img/state-machine.png}
+	\caption{Visualisierung einer Replicated State Machine. (Bildquelle: \cite{raft-user-study})}
+	\label{fig:replicated-state-machine}
+\end{figure}
+
+Der bekannteste Einigungsalgorithmus ist Paxos \cite{paxos, paxos-made-simple}. Paxos implementiert eine \textit{Replicated State Machine}. Bei diesem Modell besitzt jeder Knoten eine Zustandsmaschine, die Befehle ausführt und dadurch den Zustand ändert. Der Einigungsalgorithmus kümmert sich darum, ein Log mit Befehlen konsistent auf alle Knoten zu replizieren, sodass die Einträge im Log auf allen Knoten dieselben Befehle enthalten. Dann werden die Befehle von der Zustandsmaschine ausgeführt. Da jede Zustandsmaschine die Befehle in der selben Reihenfolge erhält, ist der Zustand auf allen Knoten konsistent. Abbildung \ref{fig:replicated-state-machine} visualisiert dieses Modell.
 
 Die einfache Version von Paxos (\textit{Basic Paxos}) ermöglicht die Einigung auf einen einzelnen Wert. Dabei werden die Teilnehmer in drei Rollen aufgeteilt:
 \begin{itemize}
@@ -97,14 +106,14 @@ Die Autoren nennen ihr Modell ein \textit{Primary-Backup System}. Es gibt zu jed
 \begin{figure}[p]
 	\centering
 	\includegraphics[width=\linewidth]{img/paxos_fail_2.png}
-	\caption{Randfall von Paxos, bei dem sich die Reihenfolge von Zustandsänderungen ändern kann, nachdem sie bereits in einer anderen Reihenfolge von einen Proposer vorgeschlagen wurden. P1 schlägt die Werte A und B für die Indizes 1 und 2 vor. P3 schlägt jedoch die Werte C und B für die Indizes 1 und 2 vor und bekommt dafür eine Mehrheit. B könnte jedoch von A abhängig sein, da die Werte in dieser Reihenfolge von P1 vorgeschlagen wurden.}
+	\caption{Randfall von Paxos, bei dem sich die Reihenfolge von Zustandsänderungen ändern kann, nachdem sie bereits in einer anderen Reihenfolge von einen Proposer vorgeschlagen wurden. P1 schlägt die Werte A und B für die Indizes 1 und 2 vor. P3 schlägt jedoch die Werte C und B für die Indizes 1 und 2 vor und bekommt dafür eine Mehrheit. B könnte jedoch von A abhängig sein, da die Werte in dieser Reihenfolge von P1 vorgeschlagen wurden. (Bildquelle: \cite{zab})}
 	\label{fig:paxos_fail}
 \end{figure}
 
 \begin{figure}[H]
 	\centering
 	\includegraphics[width=\linewidth]{img/zab.png}
-	\caption{Ablauf von Zab.}
+	\caption{Ablauf von Zab. (Bildquelle: \cite{zab})}
 	\label{fig:zab}
 \end{figure}
 

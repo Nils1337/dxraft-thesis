@@ -152,4 +152,7 @@ Für ein noch höheres Abstraktionslevel sind die Klassen \textit{DistributedAto
 
 \section{Softwaretests}
 
+Wie bei jedem Software-Projekt ist es wichtig, mit Softwaretests sicherzustellen, dass die Implementation wie vorgesehen funktioniert. Da bei Einigungsalgorithmen subtile Fehler schnell zu Inkonsistenzen führen können, die das System eigentlich verhindern soll, sind die Tests hier besonders wichtig. Grundlage der Tests sind wie üblich Unit-Tests, die einzelne Funktionen und Methoden auf Korrektheit überprüfen. Wichtig sind jedoch auch Integrationstests, die das System im Ganzen testen. Diese sind bei einem verteilten System jedoch nicht ganz einfach zu implemtentieren, da das System im Produktionsbetrieb auf mehreren Knoten läuft. Die implementierten Integrations-Tests laufen zur einfacheren Ausführung lokal und simulieren ein dabei ein Cluster, indem mehrere Server- und Client-Instanzen gestartet werden. Der Betrieb auf einem echten Cluster wurde bisher nur manuell getestet. \\
+Um den Produktionsbetrieb automatisch zu testen, müssten die Tests auf mehrere Knoten verteilt und ausgeführt werden. Außerdem müssten die Clients untereinander kommunizieren, um die Konsistenz der gelesenen Daten zu überprüfen. Sie sollten dafür nicht DXRaft nutzen, da sie gerade dieses System auf Konsistenz testen sollen und sich deswegen nicht darauf verlassen sollten. \\
+
 \section{Zukünftige Verbesserungen}
