@@ -25,6 +25,8 @@
 \usepackage{fancyhdr}
 \usepackage{graphicx}
 \usepackage{subcaption}
+\usepackage{multirow}
+\usepackage{hyphenat}
 
 % captions and figures
 \usepackage{subcaption}
