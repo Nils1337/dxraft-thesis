@@ -1,8 +1,24 @@
-\chapter{Einleitung}
+ \chapter{Einleitung}
 
 \section{Motivation}
 
+Verteilte Anwendungen sind in der Industrie weit verbreitet und werden für viele unterschiedliche Einsatzzwecke genutzt. Dies können beispielsweise verteilte Speichersysteme, verteilte Rechensysteme oder auch Web-Anwendungen sein. Vorteile gegenüber Anwendungen, die nur auf einzelnen Computern laufen, sind vielfältig. So sind zum Beispiel bessere Verfügbarkeit und Ausfalltoleranz zu nennen. Außerdem können verteilte Anwendungen auf die Ressourcen von vielen Computern zugreifen und skalieren besser. \\
+Die meisten verteilten Anwendungen müssen sich irgendwie koordinieren, sodass die Prozesse auf den verschiedenen Knoten gemeinsam an einer Aufgabe arbeiten können. Dafür können zum Beispiel eine Leader-Election oder verteilte Locks genutzt und implementiert werden. Die verteilten Anwendungen müssen sich dann darauf verlassen, dass diese Koordinierungsmechanismen korrekt funktionieren, um ihrerseits korrekt zu funktionieren. Bei wichtigen Systemen müssen diese Mechanismen auch bei Fehlern weiterhin funktionieren. Dies ist nicht einfach zu implementieren, weswegen dafür meist dedizierte Koordinierungsdienste verwendet werden. Da solche Systeme häufig in der Industrie eingesetzt werden, ist dies ein interessantes Forschungsgebiet. \\
+DXRAM \cite{dxram} ist ein verteilter In-Memory-Key-Value-Store, der auf hohe Performance bei der Speicherung von sehr vielen kleinen Objekten ausgelegt ist. 
+\todo{Warum braucht DXRAM ein Konsensus-System?}
+
 \section{Anforderungen}
+
+Das zu entwickelnde System muss folgende Anforderungen erfüllen:
+
+\begin{itemize}
+	\item Es muss von verteilten Anwendungen nutzbar sein. Es müssen also alle Knoten in einem Netzwerk auf das System zugreifen können.
+	\item Das System sollte es ermöglichen, unterschiedliche Koordinierungsmechanismen implementierbar zu machen, falls diese von DXRAM benötigt werden sollten oder falls das System von anderen Anwendungen genutzt werden sollte. Eine gute Möglichkeit dafür ist es, das System als einen einfachen Key-Value-Store zu konzipieren. Aufbauend darauf lassen sich später abstraktere Strukturen und Mechanismen implementieren. Beispielsweise kann ein Lock implementiert werden, indem versucht auf den selben Key zu schreiben und nur geschrieben wird, falls noch keine Daten vorhanden sind. Falls das Schreiben erfolgreich ist, hat der Prozess das Lock erhalten.
+	\item Die Sicht aller Knoten auf das System muss streng konsistent sein. Da Konsistenz eine graduelle Eigenschaft ist, muss hier genauer definiert werden, was dies bedeutet. Konsistenz kann durch unterschiedliche Konsistenzmodelle definiert werden. Das stärkste Konsistenzmodell ist die strikte Konsistenz: Jeder Schreibzugriff muss sofort für alle anderen Prozesse sichtbar sein. Dies ist jedoch in der Realität nicht implementierbar, da es immer etwas Zeit benötigt, bis die Information eines Schreibzugriffes zu anderen Knoten gelangt. Daher wird ein schwächeres Konsistenzmodell benötigt.  \textit{Linearizability} (auch \textit{Atomic Consistency}) ist das passende Modell. In diesem Modell scheint jede Aktion atomar ausgeführt zu werden. Siehe \cite{linearizability} für eine genau Definition des Modells. Dabei wird und anderem garantiert: Wenn ein Write abgeschlossen ist, müssen alle Reads, die danach beginnen, den Wert des Writes oder eines späteren Writes zurückgeben. Dies ist intuitiv und verhindert, dass das System unerwartete Ergebnisse liefert. Dadurch können mit dem System einfach Koordinierungsmechanismen wie z.B. verteilte Locks implementiert werden.
+	\item Die Konsistenz muss auch bei beliebigen Fehlern gewährleistet sein. So müssen Ausfälle von Knoten und auch Netzwerkpartitionierungen toleriert werden können und insbesondere nicht zu Inkonsistenzen führen.
+\end{itemize}
 
 \section{Ziele der Arbeit}
 \label{ziele}
+
+Ziel dieser Arbeit ist es, ein funktionierendes System zu entwickeln und zu implementieren, das die beschriebenen Anforderungen erfüllt. Dabei sollen die begegneten Probleme und die implementierten Lösungen dokumentiert werden. Ziel ist auch, dass das System möglichst performant ist. Um das implementierte System zu evaluieren, soll es mit ähnlichen Systemen, die auch in der Industrie eingesetzt werden, verglichen werden. Zusätzlich sollen mögliche Verbesserungen für weitergehende Arbeiten am System aufgezeigt werden.
