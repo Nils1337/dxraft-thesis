@@ -6,7 +6,7 @@
 
 Um ein System zu entwerfen, das die Anforderungen erfüllt, ist es zunächst wichtig herauszufinden, welche Eigenschaften ein verteiltes System überhaupt theoretisch erfüllen kann. Dabei hilft das CAP-Theorem \cite{cap}. Es beweist, dass ein verteilter Speicher von den drei Eigenschaften 
 \begin{itemize}
-	\item \textbf{Konsistenz}: Wird von den Autoren als \textit{Linearizability} (auch \textit{Atomic Consistency}) definiert: Wenn ein Write abgeschlossen ist, müssen alle Reads, die danach beginnen, den Wert des Writes oder eines späteren Writes zurückgeben. Dies ist ein sehr starkes Konsistenzmodell.
+	\item \textbf{Konsistenz}: Wird von den Autoren als \textit{Linearizability} (auch \textit{Atomic Consistency}) definiert. Siehe \cite{linearizability} für eine genau Definition des Modells. Dies ist ein sehr starkes Konsistenzmodell.
 	\item \textbf{Verfügbarkeit}: Das System ist zu jedem Zeitpunkt erreichbar und antwortet auf alle Anfragen an nicht abgestürzte Knoten.
 	\item \textbf{Partitionstoleranz}: Das System funktioniert weiter falls das Netzwerk partitioniert wird, also ein Teil der Knoten von einem anderen Teil abgeschnitten ist.
 \end{itemize}
