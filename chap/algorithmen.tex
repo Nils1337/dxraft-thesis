@@ -129,7 +129,7 @@ Zab läuft im Gegensatz zu Paxos in drei Phasen ab (siehe \ref{fig:zab}):
 \subsection{Raft}
 \label{raft}
 
-Raft \cite{raft, raft-thesis} basiert ebenso wie Paxos auf dem Replicated-State-Machine-Modell. Die Autoren begründen die Entwicklung von Raft damit, dass Paxos schwierig zu verstehen und zu implementieren sei. Deswegen wollten sie einen einfacheren Algorithmus entwickeln, der auf dem selben Modell basiert. Raft geht ebenso wie Paxos von einem Crash-Recovery-Modell und einem unzuverlässigen Netzwerk aus.
+Raft \cite{raft, raft-thesis} basiert ebenso wie Paxos auf dem Replicated-State-Machine-Modell. Die Autoren begründen die Entwicklung von Raft damit, dass Paxos schwierig zu verstehen und zu implementieren sei. Deswegen wollten sie einen einfacheren Algorithmus entwickeln, der auf demselben Modell basiert. Raft geht ebenso wie Paxos von einem Crash-Recovery-Modell und einem unzuverlässigen Netzwerk aus.
 Im Gegensatz zu Paxos wird das Einigungsproblem bei Raft in drei Teilprobleme aufgeteilt:
 \begin{itemize}
 	\item \textbf{Leader Election}: Die Wahl eines Leaders ist bei Raft fester Bestandteil des Algorithmus .
